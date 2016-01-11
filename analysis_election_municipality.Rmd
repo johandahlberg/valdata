@@ -1,0 +1,236 @@
+---
+title: "Rural to urban - the primary axis of swedish politics?"
+output: html_document
+---
+
+```{r, echo=FALSE, message=FALSE}
+# Loading libraries
+library("xlsx")
+library("reshape2")
+library("magrittr")
+library("dplyr")
+library("ggplot2")
+library("robCompositions")
+library("ggbiplot")
+```
+
+```{r, echo=FALSE, message=FALSE, cache=TRUE}
+# Loading data and libraries.
+load("valresultat.Rdata")
+
+election.res <- res$kommun$val2014R
+election.res <- election.res[order(election.res$ID),]
+
+kommun <- read.xlsx("kommundata.xlsx",1)
+# Translation
+levels(kommun$governing) <- c("Mixed", "Right", "Left")
+levels(kommun$municipalityTypeBroad) <- c("Rural", "City", "Conurbation")
+
+asyl <- read.csv("cleaned_up_asyl.csv")
+asyl.only.asylum.info.and.names <- 
+  select(asyl, c(municipality, asylum.seekers.per.1000.inh))
+
+
+kommun <- merge(x=kommun, y=asyl.only.asylum.info.and.names, by.x = "name", by.y = "municipality")
+kommun <- kommun[order(kommun$code),]
+
+
+kommun.code.to.name <- select(kommun, c(code, name))
+
+election.res <- merge(x=election.res, y=kommun.code.to.name, by.x="ID", by.y="code")
+rownames(election.res) <- election.res$name
+
+election.res.votes.only <- select(
+  election.res, 
+  c(name, PROCENT_M, PROCENT_C, PROCENT_FP, PROCENT_KD, PROCENT_S, PROCENT_V, PROCENT_MP, PROCENT_SD, PROCENT_FI))
+
+
+```
+
+I was recently reminded of a post from back in 2014 by Mikael Huss that he wrote after the Swedish elections in the same year. In it he did some data analysis on the results from the municipal elections as well as looking at it in the light of a number of different variables about the municipalities. He uses principal component analysis (PCA) and random forest predictive modeling to look at the data. The full blog post is available [here](https://followthedata.wordpress.com/2014/10/03/playing-with-swedish-election-data/). I do recommend checking it out since it's an interesting read!
+
+To begin with I'd like to apologize for the mix of languages in this post. The data source for this post are in swedish, and I've not taken the time to translate them. However, as I expect that this is mostly of interest to sweden based readers anyways I expect that this won't be too much of a problem.
+
+As Mikael remarks in his original post standard PCA is not suited to analysing compositional data (e.g. like in the voting data, where all the voting percentages need to add up to one for each municipality). This mean that I wanted to look into using robust principal component analysis for compositional data (available from the ["robComposions" r-package](https://cran.r-project.org/web/packages/robCompositions/index.html)) to see how that would influence the results.
+
+Lets begin by having a look at the scoring plots overlaid with some information about the municipalities.
+
+
+```{r, echo=FALSE, message=FALSE}
+election.res.votes.only.without.name <- select(election.res.votes.only, -name)
+
+rob.pca <- 
+  pcaCoDa(
+    election.res.votes.only.without.name, 
+    mult_comp = list(1:length(election.res.votes.only.without.name)))
+
+rob.pca.scores <- data.frame(rob.pca$scores)
+rob.pca.scores.with.additional.info <- cbind(rob.pca.scores, election.res)
+rob.pca.scores.with.additional.info <- merge(rob.pca.scores.with.additional.info, kommun, by.x = "ID", by.y = "code")
+
+
+party.base.plot <- 
+  ggplot(
+    rob.pca.scores.with.additional.info,
+    aes(x = rob.pca.scores$Comp.1, y = rob.pca.scores$Comp.2)) +
+    xlab("First principal component") +
+    ylab("Second principal component")
+```
+
+
+```{r, echo=FALSE, message=FALSE}
+party.base.plot +
+  geom_point(aes(colour=governing, shape = municipalityTypeBroad), size = 3) +
+  ggtitle("PCA of election data showing municipality type and largest party")
+```
+
+```{r, echo=FALSE, message=FALSE}
+party.base.plot +
+  geom_point(aes(colour=largest_party, shape = municipalityTypeBroad), size = 3) +
+  ggtitle("PCA of election data showing municipality type and largest party")
+```
+
+The two figures above shows two similar views of the Swedish political landscape. There is a clear trend from from rural to urban, with the left-right political spectrum following along approximately the same lines.
+
+A great deal of the variability in the data (77%) is explained in these two principal components. So let's look at their compositions:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+rob.loadings <- rob.pca$loadings
+rob.loadings.m <- melt(rob.loadings, id.vars = "row.name")
+comp1.loadings <- filter(rob.loadings.m, Var2 == "Comp.1")
+comp2.loadings <- filter(rob.loadings.m, Var2 == "Comp.2")
+
+ggplot(comp1.loadings, aes(x=reorder(Var1, value), y=value)) +
+  geom_bar(stat="identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle("Loadings for the first principal component") +
+  xlab("Percent votes for party")
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(comp2.loadings, aes(x=reorder(Var1,value), y=value)) +
+  geom_bar(stat="identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle("Loadings for the second principal component") +
+  xlab("Percent votes for party")
+```
+
+Looking at the loading of the first principal component we see that we should expect to see municipalities with a relatively higher proportion of the traditionally rural Center party (C) votes on the left. On this side we also expect to see municipalities with a high percentage of votes for the right-wing populist/xenophobic party, the Sweden democrats (SD). While on the right we see municipalities with a high percentage of votes for the Liberals (FP) and the Green Party (MP). My interpretation is that this lends strength to the hypothesis that the x-axis shows a separation from rural to urban.
+
+The second principal component interestingly seems to show a separation along the lines traditional Swedish political lines, with the right being on the bottom half of the figure and the left being in the top part.
+
+To get a feel for this, let's add the names of the municipalities to the PCA.
+
+```{r, echo=FALSE, message=FALSE}
+party.base.plot +
+  geom_text(aes(label = name.x)) +
+  ggtitle("PCA of election data showing municipality names")
+```
+
+While this figure is something of a mess we can clearly see the names of the outliers. And this does seem to make sense. Gällivare and Jokkmokk in the north of Sweden traditionally having a strong leaning towards the left, while Danderyd outside of Stockholm is well known as a stronghold of the Swedish right. On the left we see rural municipalities like Ragunda and Strömsund and on the right we see the larger cities of Sweden, like Stockholm and Göteborg.
+
+All-in-all it seems that my results here concur with Mikaels.
+
+Mikael then goes on to do random forest classification to see if certain keep parameters about the different municipalities can predict the voting outcome. I decided to take more straightforward route here. I think that this is especially interesting due to the statements made in the blog [Cornucopia](http://cornucopia.cornubot.se/2014/12/ju-fler-m-valjare-desto-farre.html)(in Swedish) about the correlation between the percentage of votes for SD and the number of asylum seekers in the municipality.
+
+Lars Wideräng claims that there is a strong positive correlation between the number of asylum seekers per capita in a municipality and the SD voting percentage, and a negative correlation with the number of M votes. He states as one possiblitiy that in municipalities with a high number of asylum seekers, voters flee from M over to SD because of this. However I think that that this is oversimplifying the situation.
+
+One claim that he makes is that municipalities with right-wing governments accept fewer asylum seekers. Looking at this density plot, this appears to be correct.
+
+```{r, echo=FALSE, message=FALSE}
+
+ggplot(kommun, aes(x=asylum.seekers.per.1000.inh)) +
+  geom_density(fill="aquamarine") +
+  facet_grid(. ~ governing) + 
+  xlab("Asylum seekers per 1000 inhabitants") +
+  ggtitle("Density plot of Asylum seekers per 1000 inhabitants per goverment group")
+
+```
+
+When it comes to SD the Pearson correlation between their votes and the number of asylum seekers is 0.32, and the correlation in itself is statistically significant. Claiming this as a strong correlation I'd say is a bit of a reach, though. See e.g. this [link](https://books.google.se/books?id=QBpFBgAAQBAJ&lpg=PA156&dq=what%20is%20strong%20correlation%200.3%20social%20science&pg=PA156#v=onepage&q=what%20is%20strong%20correlation%200.3%20social%20science&f=false).
+
+Let's go on by looking at the correlation between the number of votes in the municipality elections and 24 different variables.
+
+```{r, echo=FALSE, message=FALSE}
+
+# Keep only columns which are numeric and have no missing values
+kommun.cols.of.interest <- 
+  select(
+    kommun, 
+    -c(code,
+       name,
+       satisfactionInfluence, 
+       satisfactionGeneral,
+       fokusRanking,
+       longitude,
+       latitude,
+       satisfactionElderlyCare,
+       municipalityType,
+       municipalityTypeBroad,
+       governing))
+rownames(kommun.cols.of.interest) <- kommun$name
+
+correlation.election.res <- 
+  cor(
+    kommun.cols.of.interest,
+    election.res.votes.only.without.name)
+
+hc <- hclust(dist(correlation.election.res))
+hc.party <- hclust(dist(t(correlation.election.res)))
+ordered.correlation.election.res <- correlation.election.res[hc$order, hc.party$order]
+
+plot.correlation.matrix <- function(corr.mat) {
+  corr.mat.m <- melt(corr.mat)
+  ggplot(corr.mat.m, aes(x=Var1, y=Var2)) +
+    geom_tile(aes(fill=value)) + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    scale_fill_gradient2(low = "blue", high = "red", mid = "white",
+                         midpoint = 0, limit = c(-1,1))
+}
+
+plot.correlation.matrix(ordered.correlation.election.res) +
+  xlab("Municipality KPI") +
+  ylab("Voting percentage") +
+  ggtitle("Correlations between voting and municipal KPIs")
+
+```
+
+Both axis in the above have been ordered by hierarchical clustering, this makes it easier to discern the patterns. What immediately sticks out is a clear block consisting of Moderaterna (M), the Liberals (FP), MP and Feminist Initiative (FI) - it's not so surprising since we have already seen this in the first principal component of the PCA above. A relatively higher proportion of voting for these parties seem to correlate with factors indicating larger cities such as higher median income, higher education levels, higher population and urbanity, lower degrees of unemployment etc. Conversely the Social Democrats (S) and the the Left Party (V) are more popular in less well off regions.
+
+Finally, to evaluate the claim of Wideräng we can turn our eyes to the "PROCENT_SD" row. First we can conclude that the municipalities with a relatively higher proportion of SD votes are similar to the municipalities with a stronger support for S and V. The data referred to at Cornocopia about the asylum seekers is encoded as "asylum.seekers.per.1000.inh" in the figure. Looking at this data it does not appear to me that this is a very good explanation for the raise of SD. It rather appears that the general education level in the municipality as shown by the "hasEducation" and "youngUnskilled" columns provided a stronger model of explanation. One might speculate that those with higher levels of education have to some degree been vaccinated against the hateful message of SD by their knowledge. Another way to explain this is that the education level is expected to be higher in the larger cities than in rural communities, and that this is what shows up.
+
+Lets further investigate the claim by plotting the number of asylum seekers in the municipality against the number of parliament votes for SD.
+
+```{r, echo=FALSE}
+
+ggplot(asyl, aes(x = asylum.seekers.per.1000.inh, y = votes.for.sd.parlament.2014)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  ggtitle("Votes for SD vs. Asylum seekers per 1000 inhabitants") +
+  xlab("Asylum seekers per 1000 inhabitants") +
+  ylab("Percent votes for SD in parlament elections")
+
+```
+
+```{r, echo=FALSE, message=FALSE}
+
+asylum.vs.sd.votes.corr <- 
+  cor.test(
+    asyl$asylum.seekers.per.1000.inh, 
+    asyl$votes.for.sd.parlament.2014)
+
+lm.model.votes.sd.vs.asylum <- 
+  lm(votes.for.sd.parlament.2014 ~ asylum.seekers.per.1000.inh, asyl)
+
+# Uncomment to see r-square statistics, etc.
+#summary(lm.model.votes.sd.vs.asylum)
+
+```
+
+This figure shows us two things. Firstly that, yes, there appears to be positive correlation between the number of asylum seekers and the number of votes for SD. Secondly it shows that while the correlation is statistically significant it does not account for a great deal of the varition. Infact the R-squared value is only 0.1 - meaning that only 10 % of the total variation is explained by the linear model.
+
+Taken together I'd hold this as a fairly strong evidence that there is more to this issue than the view taken by Wideräng. However, as opposed to Wideräng, I do think it's important to remember that correlation does not imply causation and none of the results provided here provided solid evidence for the true cause of the success of SD.
+
+Speculating, based of this data I'd say that the support for SD appears to be related to a higher degree to the difference between cities and rural areas. Which appears to be the primary axis along which Swedish politics is based, rather politics on a left to right scale.
