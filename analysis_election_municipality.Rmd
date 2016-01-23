@@ -40,9 +40,12 @@ kommun.code.to.name <- select(kommun, c(code, name))
 election.res <- merge(x=election.res, y=kommun.code.to.name, by.x="ID", by.y="code")
 rownames(election.res) <- election.res$name
 
+
 election.res.votes.only <- select(
   election.res, 
   c(name, PROCENT_M, PROCENT_C, PROCENT_FP, PROCENT_KD, PROCENT_S, PROCENT_V, PROCENT_MP, PROCENT_SD, PROCENT_FI))
+colnames(election.res.votes.only) <- 
+  c("name", "M", "C", "FP", "KD", "S", "V", "MP", "SD", "FI")
 
 
 ```
@@ -199,7 +202,7 @@ plot.correlation.matrix(ordered.correlation.election.res) +
 
 Both axis in the above have been ordered by hierarchical clustering, this makes it easier to discern the patterns. What immediately sticks out is a clear block consisting of Moderaterna (M), the Liberals (FP), MP and Feminist Initiative (FI) - it's not so surprising since we have already seen this in the first principal component of the PCA above. A relatively higher proportion of voting for these parties seem to correlate with factors indicating larger cities such as higher median income, higher education levels, higher population and urbanity, lower degrees of unemployment etc. Conversely the Social Democrats (S) and the the Left Party (V) are more popular in less well off regions.
 
-Finally, to evaluate the claim of Wideräng we can turn our eyes to the "PROCENT_SD" row. First we can conclude that the municipalities with a relatively higher proportion of SD votes are similar to the municipalities with a stronger support for S and V. The data referred to at Cornocopia about the asylum seekers is encoded as "asylum.seekers.per.1000.inh" in the figure. Looking at this data it does not appear to me that this is a very good explanation for the raise of SD. It rather appears that the general education level in the municipality as shown by the "hasEducation" and "youngUnskilled" columns provided a stronger model of explanation. One might speculate that those with higher levels of education have to some degree been vaccinated against the hateful message of SD by their knowledge. Another way to explain this is that the education level is expected to be higher in the larger cities than in rural communities, and that this is what shows up.
+Finally, to evaluate the claim of Wideräng we can turn our eyes to the SD row. First we can conclude that the municipalities with a relatively higher proportion of SD votes are similar to the municipalities with a stronger support for S and V. The data referred to at Cornocopia about the asylum seekers is encoded as "asylum.seekers.per.1000.inh" in the figure. Looking at this data it does not appear to me that this is a very good explanation for the raise of SD. It rather appears that the general education level in the municipality as shown by the "hasEducation" and "youngUnskilled" columns provided a stronger model of explanation. One might speculate that those with higher levels of education have to some degree been vaccinated against the hateful message of SD by their knowledge. Another way to explain this is that the education level is expected to be higher in the larger cities than in rural communities, and that this is what shows up.
 
 Lets further investigate the claim by plotting the number of asylum seekers in the municipality against the number of parliament votes for SD.
 
@@ -233,4 +236,4 @@ This figure shows us two things. Firstly that, yes, there appears to be positive
 
 Taken together I'd hold this as a fairly strong evidence that there is more to this issue than the view taken by Wideräng. However, as opposed to Wideräng, I do think it's important to remember that correlation does not imply causation and none of the results provided here provided solid evidence for the true cause of the success of SD.
 
-Speculating, based of this data I'd say that the support for SD appears to be related to a higher degree to the difference between cities and rural areas. Which appears to be the primary axis along which Swedish politics is based, rather politics on a left to right scale.
+Speculating, based of this data I'd say that the support for SD appears to be related to a higher degree to the difference between cities and rural areas. Which appears to be the primary axis along which Swedish politics is based.
